@@ -458,11 +458,7 @@
     // 獲取航線資訊
     function getRouteInfo(callsign) {
         const cs = callsign.toUpperCase().trim();
-        if (!cs) return { origin: "未知", destination: "未知" };
-        if (cs.includes("191") || cs.includes("192")) return { origin: "東京成田", destination: "台北桃園" };
-        if (cs.includes("212") || cs.includes("211")) return { origin: "台北桃園", destination: "東京成田" };
-        if (cs.includes("178") || cs.includes("177")) return { origin: "台北桃園", destination: "大阪關西" };
-        if (cs.includes("401") || cs.includes("402")) return { origin: "香港", destination: "台北桃園" };
+
 
         const mockOrigins = ["台北桃園", "東京成田", "香港", "大阪關西", "曼谷", "新加坡", "首爾仁川"];
         let seed = 0; for(let i=0; i<cs.length; i++) seed += cs.charCodeAt(i);
@@ -887,7 +883,7 @@
             const altitudeFt = ac.alt_baro ? parseInt(ac.alt_baro) : (ac.alt_geom ? parseInt(ac.alt_geom) : 0);
             const speedKts = ac.gs ? Math.round(ac.gs) : 0;
             const heading = ac.track ? Math.round(ac.track) : 0;
-            const aircraftType = ac.t || "未知機型";
+            const aircraftType = "";
             const baroRate = ac.baro_rate ? parseInt(ac.baro_rate) : 0;
 
             const distance = getDistance(userLat, userLng, lat, lng);
@@ -905,9 +901,9 @@
             htmlContent += `
                 <div class="flight-row" style="${isInRange ? 'background: rgba(255,61,0,0.06); border-left: 4px solid ' + aColor : ''}">
                     <div>
-                        <strong>✈️ ${callsign}</strong> <span style="color:#aaa; font-size:13px;">(${airlineInfo.name} / ${aircraftType})</span>
+                        <strong>✈️ ${callsign}</strong> <span style="color:#aaa; font-size:13px;">(${airlineInfo.name})</span>
                         <span class="vs-status vs-${vsTrend.code}">${vsTrend.icon} ${vsTrend.text}</span>
-                        <div class="route-info">📍 航線: ${route.origin} ➔ ${route.destination}</div>
+                        <div class="route-info"></div>
                         <span style="font-size: 13px; color: #aaa;">高度: ${altitudeFt.toLocaleString()} ft | 速度: ${speedKts} kts | 航向: ${heading}°</span>
                     </div>
                     <div><span class="badge" style="${isInRange ? 'background:' + aColor + '; color:#fff; border-color:transparent;' : ''}">${distance.toFixed(1)} km</span></div>
@@ -924,7 +920,7 @@
                 planeMarkers[callsign].setIcon(planeIcon);
             } else {
                 planeMarkers[callsign] = L.marker([lat, lng], { icon: planeIcon }).addTo(map)
-                    .bindPopup(`<b>呼號:</b> ${callsign}<br><b>航空:</b> ${airlineInfo.name}<br><b>機型:</b> ${aircraftType}<br><b style="color:orange;">航線: ${route.origin} ➔ ${route.destination}</b>`);
+                    .bindPopup(`<b>呼號:</b> ${callsign}<br><b>航空:</b> ${airlineInfo.name}<br><b style="color:orange;">航線: ${route.origin} ➔ ${route.destination}</b>`);
             }
 
             const newLatLng = [lat, lng];
@@ -961,7 +957,7 @@
             const altitudeFt = state[7] ? Math.round(state[7] * 3.28084) : 0;
             const speedKts = state[9] ? Math.round(state[9] * 1.94384) : 0;
             const heading = state[10] ? Math.round(state[10]) : 0;
-            const aircraftType = "未知機型";
+            const aircraftType = "";
             const verticalRateMps = state[11] ? parseFloat(state[11]) : 0;
             const baroRate = Math.round(verticalRateMps * 196.85);
 
@@ -1077,9 +1073,7 @@
                 verticalStateSpeak = "正在平穩巡航中";
             }
 
-            const modelText = (type && type !== "未知機型") ? `，機型為 ${type}` : "";
-
-            const textToSpeak = `${speechPrefix}。偵測到 ${airlineInfo.speakName}，呼號 ${radioCallsign}，由${route.origin}飛往${route.destination}${modelText}。目前高度為 ${radioAltitude} 英尺，飛行狀態為 ${verticalStateSpeak}。目前速度 ${speed} 節。距離雷達中心點 ${Math.round(distance)} 公里。已進入防空警戒圈！`;
+            const textToSpeak = `${speechPrefix}。偵測到 ${airlineInfo.speakName}，呼號 ${radioCallsign}，目前高度為 ${radioAltitude} 英尺，飛行狀態為 ${verticalStateSpeak}。目前速度 ${speed} 節。距離雷達中心點 ${Math.round(distance)} 公里。已進入防空警戒圈！`;
 
             speakText(textToSpeak);
 
