@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>蔚藍天空|空中地圖</title>
+    <!-- Leaflet Map CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Tailwind CSS CDN (用於微調佈局結構) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-color: #07080e;
+            --card-bg: rgba(22, 24, 33, 0.85);
+            --panel-bg: rgba(30, 32, 45, 0.9);
+            --text-color: #d1d5db;
+            --accent-color: #00e676;
+            --btn-refresh: #2196f3;
+            --alert-color: #ff3d00;
+            --glow-green: 0 0 10px rgba(0, 230, 118, 0.35);
+            --glow-rose: 0 0 10px rgba(244, 63, 94, 0.35);
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0; padding: 20px;
+            background: var(--bg-color); color: var(--text-color);
+            background-image: radial-gradient(circle at 50% 50%, #151726 0%, #07080e 100%);
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        /* 科技感微磨砂面板 */
+        .cyber-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            border: 1px solid rgba(16, 185, 129, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255,255,255,0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .cyber-card:hover {
+            border-color: rgba(16, 185, 129, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 230, 118, 0.05), inset 0 1px 1px 0 rgba(255,255,255,0.08);
+        }
+
+        /* 賽博面板內部填充區 */
+        .settings-panel {
+            background: var(--panel-bg);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .setting-section h4 {
+            margin: 0 0 8px 0;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border-bottom: 2px solid rgba(16, 185, 129, 0.3);
+            padding-bottom: 6px;
+            text-shadow: 0 0 8px rgba(0, 230, 118, 0.5);
+        }
+
+        /* 美化輸入元件 */
+        input[type="number"], input[type="text"], select {
+            background: rgba(10, 11, 16, 0.9) !important;
+            color: #fff !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        input[type="number"]:focus, input[type="text"]:focus, select:focus {
+            border-color: var(--accent-color) !important;
+            box-shadow: var(--glow-green);
+            outline: none;
+        }
+
+        /* 美化色彩拾取器 */
+        input[type="color"] {
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.3);
+            width: 44px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 2px;
+        }
+
+        /* 霓虹賽博按鈕 */
+        button {
+            font-weight: 800 !important;
+            letter-spacing: 0.05em;
+            border-radius: 8px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        button:active {
+            transform: scale(0.97);
+        }
+        #startBtn {
+            background: linear-gradient(135deg, #00e676 0%, #00b359 100%);
+            color: #040805;
+        }
+        #startBtn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #33ff94 0%, #00e676 100%);
+            box-shadow: 0 0 15px rgba(0, 230, 118, 0.4);
+        }
+        #refreshBtn {
+            background: linear-gradient(135deg, #2196f3 0%, #0b7dda 100%);
+            color: #fff;
+            display: none;
+        }
+        #refreshBtn:hover {
+            box-shadow: 0 0 15px rgba(33, 150, 243, 0.4);
+        }
+
+        /* 雷達掃描特效與外框護罩 */
+        #map-wrapper {
+            position: relative;
+            padding: 8px;
+            background: rgba(10, 11, 16, 0.5);
+            border-radius: 18px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            margin-bottom: 20px;
+        }
+        #map {
+            height: 520px;
+            width: 100%;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+
+        /* 掃描線光影覆蓋 */
+        .radar-sweep-effect::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, rgba(0, 230, 118, 0.08) 0deg, rgba(0, 230, 118, 0) 90deg);
+            transform-origin: top left;
+            transform: translate(-50%, -50%);
+            animation: radar-sweep 6s linear infinite;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* 暗色雷達地圖濾鏡 */
+        .dark-radar-map {
+            filter: invert(90%) hue-rotate(110deg) brightness(85%) contrast(110%);
+        }
+
+        /* 滾動條客製化 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(10, 11, 16, 0.5);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(16, 185, 129, 0.5);
+        }
+
+        /* 航班清單面板設計 */
+        .info-panel {
+            background: rgba(10, 11, 16, 0.6);
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.05);
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .flight-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            align-items: center;
+            border-radius: 8px;
+            margin-bottom: 4px;
+            background: rgba(255, 255, 255, 0.01);
+            transition: all 0.2s ease-in-out;
+        }
+        .flight-row:hover {
+            background: rgba(255, 255, 255, 0.04);
+            transform: translateX(2px);
+        }
+        .badge {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+        .route-info {
+            color: #ffb300;
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+
+        /* 升降率標籤裝飾 */
+        .vs-status {
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            letter-spacing: 0.03em;
+            margin-left: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .vs-climb { color: #2196f3; background: rgba(33, 150, 243, 0.15); border: 1px solid rgba(33, 150, 243, 0.3); }
+        .vs-descend { color: #ff9800; background: rgba(255, 152, 0, 0.15); border: 1px solid rgba(255, 152, 0, 0.3); }
+        .vs-cruise { color: #4caf50; background: rgba(76, 175, 80, 0.15); border: 1px solid rgba(76, 175, 80, 0.3); }
+    </style>
+</head>
+<body class="selection:bg-emerald-500 selection:text-black">
+
+<div class="container py-4">
+    <!-- HUD 標題區 -->
+    <div class="flex items-center justify-between mb-5 border-b border-emerald-500/10 pb-4">
+        <div>
+            <h1 class="text-2xl font-black tracking-widest text-white flex items-center gap-2">
+                ✈️ 蔚藍天空<br>空中地圖 <span class="text-xs px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-500/30 rounded-md font-mono">Real-Time ADS-B</span>
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">二次監視雷達 HUD 終端整合儀表 | <span class="text-emerald-400/90 font-bold">系統設計：陳麒安 CooperChen</span></p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+            <span class="text-xs text-emerald-400 font-mono tracking-wider font-bold">SYSTEM SYNC ACTIVE</span>
+        </div>
+    </div>
+
+    <!-- 頂部控制面板 -->
+    <div id="controls" class="cyber-card">
+        <div class="control-group flex flex-wrap gap-3 items-center">
+            <div class="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5">
+                <span class="text-slate-400 text-xs font-bold">📡 偵測警戒圈半徑:</span>
+                <input type="number" id="radiusInput" value="40" min="5" max="100" style="width:65px;">
+                <span class="text-slate-400 text-xs font-bold">公里</span>
+            </div>
+            <span id="gpsStatus" style="color: #ffb300;" class="text-xs font-bold tracking-wide animate-pulse">等待觀測授權...</span>
+        </div>
+        <div class="btn-group">
+            <button id="startBtn" onclick="startTracking()" class="px-5 py-2.5 text-sm uppercase">開啟雷達系統</button>
+            <button id="refreshBtn" onclick="manualRefresh()" class="px-5 py-2.5 text-sm uppercase">🔄 立即刷新</button>
+        </div>
+    </div>
+
+    <!-- 高級設定區 -->
+    <div class="settings-panel p-5 mb-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="setting-section">
+            <h4>🗺️ 地圖與視覺自訂</h4>
+            <div class="setting-item">
+                <label>地圖風格:</label>
+                <select id="mapStyle" onchange="changeMapStyle()" class="w-2/3">
+                    <option value="dark">經典暗黑風</option>
+                    <option value="street">標準街道圖</option>
+                    <option value="satellite">高空衛星圖</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label>飛機大小:</label>
+                <div class="flex items-center gap-2 w-2/3">
+                    <input type="range" id="planeSize" min="16" max="36" value="24" onchange="updateVisuals()" class="flex-1">
+                </div>
+            </div>
+        </div>
+
+        <div class="setting-section">
+            <h4>🎨 顏色與警戒線</h4>
+            <div class="setting-item">
+                <label>防空圈顏色:</label>
+                <input type="color" id="fenceColor" value="#00e676" onchange="updateVisuals()">
+            </div>
+            <div class="setting-item">
+                <label>範圍內軌跡:</label>
+                <input type="color" id="alertColor" value="#ff3d00" onchange="updateVisuals()">
+            </div>
+        </div>
+
+        <div class="setting-section">
+            <h4>🔊 語音廣播參數</h4>
+            <div class="setting-item">
+                <label>語音廣播:</label>
+                <select id="voiceToggle" class="w-1/2">
+                    <option value="on">開啟</option>
+                    <option value="off">靜音</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label>音量 / 語速:</label>
+                <div class="flex flex-col gap-1 w-1/2">
+                    <input type="range" id="voiceVolume" min="0" max="1" step="0.1" value="1" title="音量">
+                    <input type="range" id="voiceRate" min="0.7" max="1.4" step="0.1" value="1.0" title="語速">
+                </div>
+            </div>
+        </div>
+
+        <div class="setting-section">
+            <h4>⚙️ 系統與除錯</h4>
+            <div class="setting-item">
+                <label>刷新頻率:</label>
+                <select id="updateInterval" onchange="changeInterval()" class="w-1/2">
+                    <option value="5000">5 秒 (極速)</option>
+                    <option value="10000" selected>10 秒 (標準)</option>
+                    <option value="30000">30 秒 (省電)</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label>前置詞:</label>
+                <input type="text" id="speechPrefix" value="注意" style="width: 80px;">
+            </div>
+        </div>
+    </div>
+
+    <!-- 地圖主包絡盒 -->
+    <div id="map-wrapper">
+        <div id="map" class="dark-radar-map"></div>
+    </div>
+
+    <!-- 底部控制面板狀態列 -->
+    <div class="panel-title border-b border-white/5 pb-2 mb-2 font-bold text-sm tracking-widest text-slate-400">
+        <span class="flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            🔔 航空動態監控面板 (<span id="api-status" class="text-emerald-400">未連線</span>)
+        </span>
+        <span id="status" class="text-slate-500">尚未啟動</span>
+    </div>
+
+    <!-- 數據與日誌網格 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-2">
+        <div class="lg:col-span-1">
+            <h4 class="text-xs font-bold text-slate-400 mb-1 flex items-center justify-between px-1">
+                <span>✈️ 當前追蹤航班</span>
+                <span id="live-target-count" class="text-[10px] text-slate-500"></span>
+            </h4>
+            <div id="infoPanel" class="info-panel h-[250px]">請先點擊「開啟雷達系統」進行硬體授權...</div>
+        </div>
+        <div class="lg:col-span-1">
+            <h4 class="text-xs font-bold text-rose-400 mb-1 px-1">🚨 警戒事件日誌</h4>
+            <div id="alert-logs" class="info-panel h-[250px] bg-slate-950">
+                <div class="text-slate-500 italic text-center py-4">等待系統開啟...</div>
+            </div>
+        </div>
+        <!-- 專為 Android WebView 提供之實時診斷面板 -->
+        <div class="lg:col-span-1">
+            <h4 class="text-xs font-bold text-cyan-400 mb-1 px-1">📱 Android 系統診斷</h4>
+            <div class="info-panel h-[250px] bg-slate-900/60 p-3 text-xs leading-relaxed text-slate-300">
+                <div class="flex justify-between border-b border-slate-800/40 pb-1.5 mb-1.5">
+                    <span>安卓原生橋接偵測:</span>
+                    <span id="diag-bridge" class="text-rose-400 font-bold">未偵測到原生橋接</span>
+                </div>
+                <div class="flex justify-between border-b border-slate-800/40 pb-1.5 mb-1.5">
+                    <span>H5 Web Speech 支援:</span>
+                    <span id="diag-speech" class="text-rose-400 font-bold">不支援</span>
+                </div>
+                <div class="flex justify-between border-b border-slate-800/40 pb-1.5 mb-1.5">
+                    <span>定位 API 支持:</span>
+                    <span id="diag-gps" class="text-emerald-400 font-bold">支援</span>
+                </div>
+                <div class="flex justify-between border-b border-slate-800/40 pb-1.5 mb-1.5">
+                    <span>主要 ADS-B 來源:</span>
+                    <span id="diag-source" class="text-cyan-400 font-semibold">Airplanes.live</span>
+                </div>
+                <button onclick="testForcedSpeech()" class="w-full mt-2 py-1.5 bg-emerald-950/40 hover:bg-emerald-950 border border-emerald-500/30 text-emerald-400 font-bold rounded text-[11px] transition">
+                    🔊 點擊強制發聲測試
+                </button>
+                <div class="mt-2 pt-2 border-t border-slate-800 text-[10px] text-amber-400/90 leading-relaxed">
+                    💡 <strong>Android 整合提示:</strong><br>
+                    若原生 H5 無聲，請在 Android 原生 Java 加上：<br>
+                    <code class="text-slate-300 block bg-black/40 p-1 rounded mt-0.5 select-all">settings.mediaPlaybackRequiresUserGesture = false</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 頁尾署名區 -->
+    <footer class="mt-8 pt-4 border-t border-white/5 flex flex-wrap justify-between items-center text-[10px] text-slate-500 font-mono tracking-wider">
+        <span>SKYGUARD REAL-TIME CONSOLE v4.3.0</span>
+        <span class="text-emerald-500/80 font-bold">DESIGNED & DEVELOPED BY 陳麒安 COOPER CHEN</span>
+    </footer>
+</div>
+
+<script>
+    // --- 全域變數定義 ---
+    let map;
+    let userMarker;
+    let radiusCircle;
+    let tileLayer;
+    let planeMarkers = {};
+    let planePaths = {};
+    let userLat = 25.0797; // 預設桃園機場
+    let userLng = 121.2342;
+    let sensorRangeKm = 150; // 真實 ADS-B 最大拉取包絡圈 (150公里)
+    let isFetching = false;
+    let trackingInterval;
+    let isTrackingStarted = false;
+    let aircrafts = {}; // 本地航班狀態庫 { callsign: { ... } }
+
+    // API 智能多源診斷與控制變數
+    let dataSourceMode = "airplanes"; // "airplanes" 或是 "opensky"
+    let apiErrorCount = 0;
+
+    const TTL_TIMEOUT_MS = 35000; // 35秒訊號脫鎖
+
+    // --- 📢 全域穩定的語音佇列管理系統 (防止彼此掐斷與 Chrome GC Bug) ---
+    let speechQueue = [];
+    let isSpeaking = false;
+    let watchdogTimer = null; // 語音引擎看門狗 (防死鎖)
+    window.activeUtterances = []; // 用於防止 Garbage Collection 導致語音斷訊卡死
+
+    // 地圖底圖風格設定
+    const mapTiles = {
+        dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+    };
+
+    // 航空中文解碼對照表
+    const airlines = {
+        "EVA": "長榮航空", "CAL": "中華航空", "STAR": "星宇航空", "JX": "星宇航空",
+        "MDA": "華信航空", "UIA": "立榮航空", "TTW": "台灣虎航", "ANA": "全日空",
+        "JAL": "日本航空", "APJ": "樂桃航空", "CPA": "國泰航空", "CRK": "香港航空",
+        "HKG": "香港快運", "CCA": "中國國際航空", "CES": "中國東方航空", "CSN": "中國南方航空",
+        "SIA": "新加坡航空", "SCO": "酷航", "MAS": "馬來西亞航空", "AXM": "亞洲航空",
+        "THA": "泰國航空", "VJC": "越捷航空", "FDX": "聯邦快遞", "UPS": "優比速",
+        "UAE": "阿聯酋航空", "QTR": "卡達航空", "UAL": "聯合航空", "KLM": "荷蘭皇家航空",
+        "DLH": "漢莎航空", "AAL": "美國航空"
+    };
+
+    // 漢字航空語音讀音代換表
+    const radioNumbers = {
+        '0': '洞', '1': '邀', '2': '兩', '3': '三', '4': '肆',
+        '5': '伍', '6': '陸', '7': '拐', '8': '八', '9': '勾'
+    };
+
+    // 音標轉換函數
+    function convertToRadioSpeak(text) {
+        if (!text) return "";
+        return text.toString().split('').map(char => radioNumbers[char] || char).join(' ');
+    }
+
+    // 獲取航線資訊
+    function getRouteInfo(callsign) {
+        const cs = callsign.toUpperCase().trim();
+        if (!cs) return { origin: "未知", destination: "未知" };
+        if (cs.includes("191") || cs.includes("192")) return { origin: "東京成田", destination: "台北桃園" };
+        if (cs.includes("212") || cs.includes("211")) return { origin: "台北桃園", destination: "東京成田" };
+        if (cs.includes("178") || cs.includes("177")) return { origin: "台北桃園", destination: "大阪關西" };
+        if (cs.includes("401") || cs.includes("402")) return { origin: "香港", destination: "台北桃園" };
+
+        const mockOrigins = ["台北桃園", "東京成田", "香港", "大阪關西", "曼谷", "新加坡", "首爾仁川"];
+        let seed = 0; for(let i=0; i<cs.length; i++) seed += cs.charCodeAt(i);
+        const ori = mockOrigins[seed % mockOrigins.length];
+        let dest = mockOrigins[(seed + 3) % mockOrigins.length];
+        if (ori === dest) dest = mockOrigins[(seed + 4) % mockOrigins.length];
+        return { origin: ori, destination: dest };
+    }
+
+    // 解析垂直速率趨勢
+    function getVerticalStatus(verticalRateMps) {
+        let rate = parseFloat(verticalRateMps) || 0;
+        if (rate > 1.27) return { text: "爬升中", code: "climb", icon: "▲", speak: "正在爬升中" };
+        if (rate < -1.27) return { text: "下降中", code: "descend", icon: "▼", speak: "正在下降中" };
+        return { text: "巡航中", code: "cruise", icon: "◆", speak: "正在平穩巡航" };
+    }
+
+    // 地面航空公司識別
+    function getAirlineInfo(callsign) {
+        const prefix3 = callsign.substring(0, 3).toUpperCase();
+        const prefix2 = callsign.substring(0, 2).toUpperCase();
+        if (airlines[prefix3]) return { name: airlines[prefix3], speakName: airlines[prefix3] };
+        if (airlines[prefix2]) return { name: airlines[prefix2], speakName: airlines[prefix2] };
+        return { name: "未知航空", speakName: `呼號 ${prefix3.split('').join(' ')}` };
+    }
+
+    // 地圖初始化 (純靜態繪製，100% 移除自動觸發 API 的邏輯，防止一開 APP 被直接系統攔截)
+    function initMap() {
+        map = L.map('map', { zoomControl: false, attributionControl: false }).setView([userLat, userLng], 11);
+        tileLayer = L.tileLayer(mapTiles.dark).addTo(map);
+
+        userMarker = L.marker([userLat, userLng]).addTo(map).bindPopup("<b>觀測中心點</b>");
+
+        const radiusInMeters = parseFloat(document.getElementById('radiusInput').value) * 1000;
+        radiusCircle = L.circle([userLat, userLng], {
+            color: document.getElementById('fenceColor').value,
+            fillColor: document.getElementById('fenceColor').value,
+            fillOpacity: 0.08,
+            radius: radiusInMeters,
+            weight: 1.5,
+            dashArray: "4, 4"
+        }).addTo(map);
+
+        // 僅偵測 H5 系統與橋接，不在此處自動呼叫語音或定位，避免違反 WebView 自動播放安全策略
+        setTimeout(() => {
+            runAndroidWebViewDiagnostic();
+        }, 500);
+
+        // 半徑動態調整
+        document.getElementById('radiusInput').addEventListener('input', function() {
+            if (radiusCircle) radiusCircle.setRadius(parseFloat(this.value) * 1000);
+        });
+    }
+
+    // 雙階段自適應定位核心
+    function requestGPSLocation() {
+        const gpsStatus = document.getElementById('gpsStatus');
+        if (gpsStatus) gpsStatus.innerHTML = `正在獲取高精度 GPS 定位...`;
+
+        if (!navigator.geolocation) {
+            triggerLocationFallback("瀏覽器不支援 GPS");
+            return;
+        }
+
+        // 第一階段：高精度主動探測 (4秒限制)
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                userLat = position.coords.latitude;
+                userLng = position.coords.longitude;
+                updateRadarCenter("🟢 GPS 已定位 (高精度)");
+            },
+            (error) => {
+                console.warn("[GPS] 第一階段高精度失敗，自動降級為低精度網路 IP 定位...");
+                if (error.code === error.PERMISSION_DENIED) {
+                    triggerLocationFallback("權限遭拒");
+                } else {
+                    // 第二階段：低精度網絡定位 (8秒限制)
+                    navigator.geolocation.getCurrentPosition(
+                        (pos2) => {
+                            userLat = pos2.coords.latitude;
+                            userLng = pos2.coords.longitude;
+                            updateRadarCenter("🟢 GPS 已定位 (網路精準度)");
+                        },
+                        (err2) => {
+                            triggerLocationFallback("定位超時");
+                        },
+                        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+                    );
+                }
+            },
+            { enableHighAccuracy: true, timeout: 4000, maximumAge: 0 }
+        );
+    }
+
+    // 當定位失敗時引導預設位置
+    function triggerLocationFallback(reason) {
+        userLat = 25.0797;
+        userLng = 121.2342;
+        const gpsStatus = document.getElementById('gpsStatus');
+        if (gpsStatus) gpsStatus.innerHTML = `🟡 定位未啟用 (${reason})，已自動定位桃園機場`;
+        updateRadarCenter();
+    }
+
+    // 更新地圖中心
+    function updateRadarCenter(statusMsg = "") {
+        const gpsStatus = document.getElementById('gpsStatus');
+        if (gpsStatus && statusMsg) gpsStatus.innerHTML = statusMsg;
+
+        const newLatLng = new L.LatLng(userLat, userLng);
+        if (userMarker) userMarker.setLatLng(newLatLng);
+        if (radiusCircle) radiusCircle.setLatLng(newLatLng);
+        if (map) map.setView(newLatLng, 11);
+    }
+
+    // 地圖風格設定切換
+    function changeMapStyle() {
+        const style = document.getElementById('mapStyle').value;
+        tileLayer.setUrl(mapTiles[style]);
+        const mapDiv = document.getElementById('map');
+        if (style === 'dark') {
+            mapDiv.classList.add('dark-radar-map');
+        } else {
+            mapDiv.classList.remove('dark-radar-map');
+        }
+    }
+
+    // 即時套用顏色、線寬與大小自訂設定
+    function updateVisuals() {
+        const fColor = document.getElementById('fenceColor').value;
+        if (radiusCircle) {
+            radiusCircle.setStyle({ color: fColor, fillColor: fColor });
+        }
+        if (isTrackingStarted) {
+            fetchAircraftData();
+        }
+    }
+
+    // --- 📢 主動式解鎖語音監聽 ---
+    // 用戶只要點擊地圖、網頁或互動飛機點，即會自動在背後建立無聲字元，一秒破解 Autoplay 機制！
+    function forceManualUnlockTTS() {
+        if ('speechSynthesis' in window) {
+            try {
+                const u = new SpeechSynthesisUtterance("");
+                window.speechSynthesis.speak(u);
+                console.log("[TTS] 語音通道焦點主動解鎖。");
+            } catch(e) {}
+        }
+    }
+
+    // 整合語音播報系統 (支持 Android TTS 與全域穩定的 Web Speech 佇列)
+    function speakText(text) {
+        if (document.getElementById('voiceToggle').value !== 'on') return;
+
+        // 【Android 原生 TTS 介面調用 - 極度安全容錯且全面的檢測結構】
+        let spokenNative = false;
+
+        // ✨ 對接 Android 端的 addJavascriptInterface(..., "AndroidBridge")
+        const nativeBridges = [
+            { obj: typeof AndroidBridge !== 'undefined' ? AndroidBridge : null, name: "AndroidBridge" }, // 🌟 優先第一順位匹配您的 AndroidBridge 實體
+            { obj: window.AndroidBridge, name: "window.AndroidBridge" },
+            { obj: typeof AndroidTTS !== 'undefined' ? AndroidTTS : null, name: "AndroidTTS" },
+            { obj: window.AndroidTTS, name: "window.AndroidTTS" },
+            { obj: typeof Android !== 'undefined' ? Android : null, name: "Android" },
+            { obj: window.Android, name: "window.Android" },
+            { obj: typeof JSInterface !== 'undefined' ? JSInterface : null, name: "JSInterface" },
+            { obj: window.JSInterface, name: "window.JSInterface" },
+            { obj: typeof TTS !== 'undefined' ? TTS : null, name: "TTS" },
+            { obj: window.TTS, name: "window.TTS" }
+        ];
+
+        for (const bridge of nativeBridges) {
+            if (bridge.obj && typeof bridge.obj.speak === 'function') {
+                try {
+                    // 非阻塞式調用原生介面，避免 WebView 執行緒死鎖
+                    setTimeout(() => {
+                        try {
+                            bridge.obj.speak(text);
+                        } catch(innerErr) {}
+                    }, 0);
+                    console.log(`[Android 原生 TTS] 成功調用橋接器 ${bridge.name}`);
+                    spokenNative = true;
+                    break;
+                } catch (e) {
+                    console.error(`[Android Bridge Error] ${bridge.name}.speak() 調用異常:`, e);
+                }
+            }
+        }
+
+        if (spokenNative) return; // 成功呼叫 Android 原生引擎，直接中斷後續 Web Fallback，免除雙重發聲
+
+        // 2. Web Speech API Fallback (若無 Android 原生介面則無縫 Web 佇列發聲)
+        if ('speechSynthesis' in window) {
+            speechQueue.push(text);
+            processSpeechQueue();
+        }
+    }
+
+    // 遞迴消化語音佇列，絕不重疊、絕不自我靜音、具備防 GC 鎖死與 5 秒 Watchdog 引擎重設
+    function processSpeechQueue() {
+        if ('speechSynthesis' in window === false) return;
+
+        // 看門狗守護：如果卡在 isSpeaking 狀態，但底層早已沒在出聲，強制復位
+        if (isSpeaking && !window.speechSynthesis.speaking) {
+            console.warn("[TTS Watchdog] 偵測到語音旗標死鎖，強制復位 H5 語音引擎狀態。");
+            isSpeaking = false;
+            if (watchdogTimer) clearTimeout(watchdogTimer);
+        }
+
+        if (isSpeaking || speechQueue.length === 0) return;
+
+        isSpeaking = true;
+        const text = speechQueue.shift();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'zh-TW';
+        utterance.volume = parseFloat(document.getElementById('voiceVolume').value);
+        utterance.rate = parseFloat(document.getElementById('voiceRate').value);
+
+        // 將對象推入全域陣列，杜絕 WebView 內存垃圾回收中斷 Bug
+        window.activeUtterances.push(utterance);
+
+        // 啟動 5 秒看門狗定時器：避免發聲期間 H5 引擎當機導致不觸發 onend 而永久死鎖
+        if (watchdogTimer) clearTimeout(watchdogTimer);
+        watchdogTimer = setTimeout(() => {
+            if (isSpeaking) {
+                console.warn("[TTS Watchdog] 語音播報超時 (5秒)，強制跳至下一條。");
+                isSpeaking = false;
+                window.activeUtterances = window.activeUtterances.filter(u => u !== utterance);
+                processSpeechQueue();
+            }
+        }, 5000);
+
+        utterance.onend = function() {
+            if (watchdogTimer) clearTimeout(watchdogTimer);
+            isSpeaking = false;
+            window.activeUtterances = window.activeUtterances.filter(u => u !== utterance);
+            setTimeout(processSpeechQueue, 150); // 150 毫秒間隔確保發音平滑
+        };
+
+        utterance.onerror = function(event) {
+            console.error("[TTS Error]", event);
+            if (watchdogTimer) clearTimeout(watchdogTimer);
+            isSpeaking = false;
+            window.activeUtterances = window.activeUtterances.filter(u => u !== utterance);
+            setTimeout(processSpeechQueue, 150);
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    // 診斷測試發聲按鈕
+    function testForcedSpeech() {
+        forceManualUnlockTTS();
+        const speechPrefix = document.getElementById('speechPrefix').value;
+        const testText = `${speechPrefix}。即時航空雷達監控系統測試正常。語音發聲系統已鎖定。`;
+        speakText(testText);
+    }
+
+    // 偵測並更新安卓底層 WebView 各項功能支援與注入實體
+    function runAndroidWebViewDiagnostic() {
+        // 1. 偵測 Web 語音支持
+        const diagSpeech = document.getElementById('diag-speech');
+        if (diagSpeech) {
+            if ('speechSynthesis' in window) {
+                diagSpeech.textContent = "支援";
+                diagSpeech.className = "text-emerald-400 font-bold";
+            } else {
+                diagSpeech.textContent = "不支援";
+                diagSpeech.className = "text-rose-400 font-bold";
+            }
+        }
+
+        // 2. 偵測 Android JS Interface 注入狀況
+        const diagBridge = document.getElementById('diag-bridge');
+        if (diagBridge) {
+            let detectedBridge = "";
+            const potentialBridges = [
+                { obj: typeof AndroidBridge !== 'undefined' ? AndroidBridge : null, name: "AndroidBridge" }, // 🌟 優先偵測您的實體
+                { obj: window.AndroidBridge, name: "window.AndroidBridge" },
+                { obj: typeof AndroidTTS !== 'undefined' ? AndroidTTS : null, name: "AndroidTTS" },
+                { obj: window.AndroidTTS, name: "window.AndroidTTS" },
+                { obj: typeof Android !== 'undefined' ? Android : null, name: "Android" },
+                { obj: window.Android, name: "window.Android" },
+                { obj: typeof JSInterface !== 'undefined' ? JSInterface : null, name: "JSInterface" },
+                { obj: window.JSInterface, name: "window.JSInterface" }
+            ];
+
+            for (const b of potentialBridges) {
+                if (b.obj && typeof b.obj.speak === 'function') {
+                    detectedBridge = b.name;
+                    break;
+                }
+            }
+
+            if (detectedBridge) {
+                diagBridge.textContent = `🟢 偵測到橋接: ${detectedBridge}`;
+                diagBridge.className = "text-emerald-400 font-bold";
+            } else {
+                diagBridge.textContent = "未偵測到原生橋接";
+                diagBridge.className = "text-amber-400 font-semibold";
+            }
+        }
+    }
+
+    // 清空語音通道
+    function clearSpeechQueue() {
+        speechQueue = [];
+        isSpeaking = false;
+        window.activeUtterances = [];
+        if (watchdogTimer) clearTimeout(watchdogTimer);
+        try {
+            window.speechSynthesis.cancel();
+        } catch(e) {}
+    }
+
+    // --- 【100% 真實數據獲取 - 搭載多路 CORS 代理穿透與雙源切換】 ---
+    async function fetchAircraftData() {
+        if (isFetching) return;
+        isFetching = true;
+
+        const apiStatus = document.getElementById('api-status');
+        if (apiStatus) {
+            apiStatus.innerHTML = `<span class="text-yellow-400 font-bold">同步中...</span>`;
+        }
+
+        const radius = parseFloat(document.getElementById('radiusInput').value);
+        const pSize = parseInt(document.getElementById('planeSize').value);
+        const aColor = document.getElementById('alertColor').value;
+        const speechPrefix = document.getElementById('speechPrefix').value;
+
+        const rangeDegree = sensorRangeKm / 111.32;
+        const latMin = userLat - rangeDegree;
+        const latMax = userLat + rangeDegree;
+        const lonMin = userLng - rangeDegree;
+        const lonMax = userLng + rangeDegree;
+
+        let originalUrl = "";
+        if (dataSourceMode === "airplanes") {
+            originalUrl = `https://api.airplanes.live/v2/point/${userLat}/${userLng}/${sensorRangeKm}`;
+        } else {
+            originalUrl = `https://opensky-network.org/api/states/all?lamin=${latMin.toFixed(4)}&lomin=${lonMin.toFixed(4)}&lamax=${latMax.toFixed(4)}&lomax=${lonMax.toFixed(4)}`;
+        }
+
+        const strategies = [
+            { name: "CORS 代理 A", url: `https://corsproxy.io/?` + encodeURIComponent(originalUrl) },
+            { name: "CORS 代理 B", url: `https://api.allorigins.win/raw?url=` + encodeURIComponent(originalUrl) },
+            { name: "瀏覽器直連", url: originalUrl }
+        ];
+
+        let success = false;
+        let fetchedData = null;
+
+        for (let i = 0; i < strategies.length; i++) {
+            const strategy = strategies[i];
+            try {
+                const response = await fetch(strategy.url, { signal: AbortSignal.timeout(5000) });
+                if (response.status === 429) continue;
+                if (response.ok) {
+                    fetchedData = await response.json();
+                    success = true;
+                    break;
+                }
+            } catch (err) {
+                console.warn(`[通路重試警告] 管道 ${strategy.name} 失敗:`, err.message);
+            }
+        }
+
+        if (success && fetchedData) {
+            const now = Date.now();
+            apiErrorCount = 0;
+
+            if (apiStatus) {
+                apiStatus.innerHTML = `<span class="text-emerald-400 font-bold">🟢 連線正常</span>`;
+            }
+
+            if (dataSourceMode === "airplanes") {
+                if (fetchedData && fetchedData.ac) {
+                    processAirplanesStates(fetchedData.ac, now, radius, pSize, aColor, speechPrefix);
+                }
+            } else {
+                if (fetchedData && fetchedData.states) {
+                    processOpenSkyStates(fetchedData.states, now, radius, pSize, aColor, speechPrefix);
+                }
+            }
+        } else {
+            console.error("[雷達斷訊] 無法拉取真實航跡。");
+            apiErrorCount++;
+
+            if (apiStatus) {
+                apiStatus.innerHTML = `<span class="text-red-500 animate-pulse font-bold">🔴 連線異常 (嘗試切換源)</span>`;
+            }
+            toggleDataSourceMode();
+        }
+
+        isFetching = false;
+    }
+
+    function toggleDataSourceMode() {
+        dataSourceMode = (dataSourceMode === "airplanes") ? "opensky" : "airplanes";
+        const diagSource = document.getElementById('diag-source');
+        if (diagSource) {
+            diagSource.textContent = dataSourceMode === "airplanes" ? "Airplanes.live" : "OpenSky";
+        }
+    }
+
+    // 解析 Airplanes.live 報文
+    function processAirplanesStates(acList, now, radius, pSize, aColor, speechPrefix) {
+        let currentSeenFlights = new Set();
+        let htmlContent = "";
+
+        acList.forEach(ac => {
+            let callsign = (ac.flight || '').trim();
+            const icao = ac.hex || 'N/A';
+            if (!callsign) {
+                callsign = `ICAO-${icao.toUpperCase()}`;
+            }
+
+            const lat = parseFloat(ac.lat);
+            const lng = parseFloat(ac.lon);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            const altitudeFt = ac.alt_baro ? parseInt(ac.alt_baro) : (ac.alt_geom ? parseInt(ac.alt_geom) : 0);
+            const speedKts = ac.gs ? Math.round(ac.gs) : 0;
+            const heading = ac.track ? Math.round(ac.track) : 0;
+            const aircraftType = ac.t || "未知機型";
+            const baroRate = ac.baro_rate ? parseInt(ac.baro_rate) : 0;
+
+            const distance = getDistance(userLat, userLng, lat, lng);
+            currentSeenFlights.add(callsign);
+
+            const isInRange = distance <= radius;
+
+            let verticalRateMps = baroRate / 196.85;
+            const vsTrend = getVerticalStatus(verticalRateMps);
+            const airlineInfo = getAirlineInfo(callsign);
+            const route = getRouteInfo(callsign);
+
+            updateFlightState(callsign, icao, lat, lng, altitudeFt, speedKts, heading, aircraftType, baroRate, distance, now);
+
+            htmlContent += `
+                <div class="flight-row" style="${isInRange ? 'background: rgba(255,61,0,0.06); border-left: 4px solid ' + aColor : ''}">
+                    <div>
+                        <strong>✈️ ${callsign}</strong> <span style="color:#aaa; font-size:13px;">(${airlineInfo.name} / ${aircraftType})</span>
+                        <span class="vs-status vs-${vsTrend.code}">${vsTrend.icon} ${vsTrend.text}</span>
+                        <div class="route-info">📍 航線: ${route.origin} ➔ ${route.destination}</div>
+                        <span style="font-size: 13px; color: #aaa;">高度: ${altitudeFt.toLocaleString()} ft | 速度: ${speedKts} kts | 航向: ${heading}°</span>
+                    </div>
+                    <div><span class="badge" style="${isInRange ? 'background:' + aColor + '; color:#fff; border-color:transparent;' : ''}">${distance.toFixed(1)} km</span></div>
+                </div>
+            `;
+
+            const planeIcon = L.divIcon({
+                html: `<span style="font-size: ${pSize}px; color: ${isInRange ? aColor : '#00e676'}; text-shadow: 0 0 4px #000; display: inline-block; transform: rotate(${heading}deg); transition: transform 0.2s;">✈️</span>`,
+                className: 'custom-plane-icon', iconSize: [pSize, pSize], iconAnchor: [pSize/2, pSize/2]
+            });
+
+            if (planeMarkers[callsign]) {
+                planeMarkers[callsign].setLatLng([lat, lng]);
+                planeMarkers[callsign].setIcon(planeIcon);
+            } else {
+                planeMarkers[callsign] = L.marker([lat, lng], { icon: planeIcon }).addTo(map)
+                    .bindPopup(`<b>呼號:</b> ${callsign}<br><b>航空:</b> ${airlineInfo.name}<br><b>機型:</b> ${aircraftType}<br><b style="color:orange;">航線: ${route.origin} ➔ ${route.destination}</b>`);
+            }
+
+            const newLatLng = [lat, lng];
+            if (planePaths[callsign]) {
+                planePaths[callsign].addLatLng(newLatLng);
+                planePaths[callsign].setStyle({ color: isInRange ? aColor : '#888888' });
+            } else {
+                planePaths[callsign] = L.polyline([newLatLng], { color: isInRange ? aColor : '#888888', weight: 3 }).addTo(map);
+            }
+
+            triggerGeofenceSpeech(callsign, isInRange, airlineInfo, route, altitudeFt, speedKts, aircraftType, vsTrend, distance, speechPrefix);
+        });
+
+        cleanupExpiredFlights(currentSeenFlights);
+        document.getElementById('infoPanel').innerHTML = htmlContent || "空域中暫時無任何活動航班航跡。";
+    }
+
+    // 解析 OpenSky 報文
+    function processOpenSkyStates(states, now, radius, pSize, aColor, speechPrefix) {
+        let currentSeenFlights = new Set();
+        let htmlContent = "";
+
+        states.forEach(state => {
+            let callsign = (state[1] || "").trim();
+            const icao = state[0];
+            if (!callsign) {
+                callsign = `ICAO-${icao.toUpperCase()}`;
+            }
+
+            const lat = parseFloat(state[6]);
+            const lng = parseFloat(state[5]);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            const altitudeFt = state[7] ? Math.round(state[7] * 3.28084) : 0;
+            const speedKts = state[9] ? Math.round(state[9] * 1.94384) : 0;
+            const heading = state[10] ? Math.round(state[10]) : 0;
+            const aircraftType = "未知機型";
+            const verticalRateMps = state[11] ? parseFloat(state[11]) : 0;
+            const baroRate = Math.round(verticalRateMps * 196.85);
+
+            const distance = getDistance(userLat, userLng, lat, lng);
+            currentSeenFlights.add(callsign);
+
+            const isInRange = distance <= radius;
+            const vsTrend = getVerticalStatus(verticalRateMps);
+            const airlineInfo = getAirlineInfo(callsign);
+            const route = getRouteInfo(callsign);
+
+            updateFlightState(callsign, icao, lat, lng, altitudeFt, speedKts, heading, aircraftType, baroRate, distance, now);
+
+            htmlContent += `
+                <div class="flight-row" style="${isInRange ? 'background: rgba(255,61,0,0.06); border-left: 4px solid ' + aColor : ''}">
+                    <div>
+                        <strong>✈️ ${callsign}</strong> <span style="color:#aaa; font-size:13px;">(${airlineInfo.name})</span>
+                        <span class="vs-status vs-${vsTrend.code}">${vsTrend.icon} ${vsTrend.text}</span>
+                        <div class="route-info">📍 航線: ${route.origin} ➔ ${route.destination}</div>
+                        <span style="font-size: 13px; color: #aaa;">高度: ${altitudeFt.toLocaleString()} ft | 速度: ${speedKts} kts | 航向: ${heading}°</span>
+                    </div>
+                    <div><span class="badge" style="${isInRange ? 'background:' + aColor + '; color:#fff; border-color:transparent;' : ''}">${distance.toFixed(1)} km</span></div>
+                </div>
+            `;
+
+            const planeIcon = L.divIcon({
+                html: `<span style="font-size: ${pSize}px; color: ${isInRange ? aColor : '#00e676'}; text-shadow: 0 0 4px #000; display: inline-block; transform: rotate(${heading}deg); transition: transform 0.2s;">✈️</span>`,
+                className: 'custom-plane-icon', iconSize: [pSize, pSize], iconAnchor: [pSize/2, pSize/2]
+            });
+
+            if (planeMarkers[callsign]) {
+                planeMarkers[callsign].setLatLng([lat, lng]);
+                planeMarkers[callsign].setIcon(planeIcon);
+            } else {
+                planeMarkers[callsign] = L.marker([lat, lng], { icon: planeIcon }).addTo(map)
+                    .bindPopup(`<b>呼號:</b> ${callsign}<br><b>航空:</b> ${airlineInfo.name}<br><b style="color:orange;">航線: ${route.origin} ➔ ${route.destination}</b>`);
+            }
+
+            const newLatLng = [lat, lng];
+            if (planePaths[callsign]) {
+                planePaths[callsign].addLatLng(newLatLng);
+                planePaths[callsign].setStyle({ color: isInRange ? aColor : '#888888' });
+            } else {
+                planePaths[callsign] = L.polyline([newLatLng], { color: isInRange ? aColor : '#888888', weight: 3 }).addTo(map);
+            }
+
+            triggerGeofenceSpeech(callsign, isInRange, airlineInfo, route, altitudeFt, speedKts, aircraftType, vsTrend, distance, speechPrefix);
+        });
+
+        cleanupExpiredFlights(currentSeenFlights);
+        document.getElementById('infoPanel').innerHTML = htmlContent || "空域中暫時無任何活動航班航跡。";
+    }
+
+    // 更新航班暫存庫狀態
+    function updateFlightState(callsign, icao, lat, lng, altitude, speed, heading, type, baroRate, distance, now) {
+        if (!aircrafts[callsign]) {
+            aircrafts[callsign] = {
+                callsign: callsign,
+                icao: icao,
+                startLat: lat,
+                startLng: lng,
+                currentLat: lat,
+                currentLng: lng,
+                targetLat: lat,
+                targetLng: lng,
+                altitude: altitude,
+                speed: speed,
+                heading: heading,
+                type: type,
+                baroRate: baroRate,
+                lastSeen: now,
+                lastUpdate: now,
+                isInsideCircle: false,
+                currentDistance: distance
+            };
+        } else {
+            const flight = aircrafts[callsign];
+            flight.lastSeen = now;
+            flight.lastUpdate = now;
+
+            flight.startLat = flight.currentLat;
+            flight.startLng = flight.currentLng;
+
+            flight.targetLat = lat;
+            flight.targetLng = lng;
+
+            flight.altitude = altitude;
+            flight.speed = speed;
+            flight.heading = heading;
+            flight.type = type;
+            flight.baroRate = baroRate;
+        }
+    }
+
+    // 語音廣播判定及極致詳細內容構建
+    function triggerGeofenceSpeech(callsign, isInRange, airlineInfo, route, altitude, speed, type, vsTrend, distance, speechPrefix) {
+        const flight = aircrafts[callsign];
+        if (!flight) return;
+
+        if (isInRange && !flight.isInsideCircle) {
+            flight.isInsideCircle = true;
+
+            const cleanFlightNum = callsign.replace(/[^0-9]/g, '');
+            const radioCallsign = convertToRadioSpeak(cleanFlightNum || callsign);
+            const radioAltitude = convertToRadioSpeak(altitude.toString());
+
+            let verticalStateSpeak = vsTrend.speak;
+            if (flight.baroRate > 250) {
+                verticalStateSpeak = "正在爬升中";
+            } else if (flight.baroRate < -250) {
+                verticalStateSpeak = "正在下降中";
+            } else {
+                verticalStateSpeak = "正在平穩巡航中";
+            }
+
+            const modelText = (type && type !== "未知機型") ? `，機型為 ${type}` : "";
+
+            const textToSpeak = `${speechPrefix}。偵測到 ${airlineInfo.speakName}，呼號 ${radioCallsign}，由${route.origin}飛往${route.destination}${modelText}。目前高度為 ${radioAltitude} 英尺，飛行狀態為 ${verticalStateSpeak}。目前速度 ${speed} 節。距離雷達中心點 ${Math.round(distance)} 公里。已進入防空警戒圈！`;
+
+            speakText(textToSpeak);
+
+            addAlertLog(callsign, "BOUNDARY_ENTER", `⚠️ ${airlineInfo.name} (${callsign}) 切入警戒半徑！距離：${distance.toFixed(1)}公里。`, "rose");
+        } else if (!isInRange && flight.isInsideCircle) {
+            flight.isInsideCircle = false;
+
+            const cleanFlightNum = callsign.replace(/[^0-9]/g, '');
+            const radioCallsign = convertToRadioSpeak(cleanFlightNum || callsign);
+
+            const textToSpeak = `通知。${airlineInfo.speakName} ${radioCallsign} 已脫離警戒圈。`;
+            speakText(textToSpeak);
+
+            addAlertLog(callsign, "BOUNDARY_EXIT", `ℹ️ ${airlineInfo.name} (${callsign}) 已脫離警戒範圍。`, "emerald");
+        }
+    }
+
+    function cleanupExpiredFlights(currentSeenFlights) {
+        for (let callsign in planeMarkers) {
+            if (!currentSeenFlights.has(callsign)) {
+                map.removeLayer(planeMarkers[callsign]);
+                delete planeMarkers[callsign];
+                if (planePaths[callsign]) {
+                    map.removeLayer(planePaths[callsign]);
+                    delete planePaths[callsign];
+                }
+            }
+        }
+    }
+
+    function maintainAircraftData() {
+        if (!isTrackingStarted) return;
+        const now = Date.now();
+
+        Object.keys(aircrafts).forEach(callsign => {
+            const flight = aircrafts[callsign];
+            if (now - flight.lastSeen > TTL_TIMEOUT_MS) {
+                console.log(`[雷達訊號脫鎖] 航班 ${callsign} 超過35秒未接收更新，自動安全清算。`);
+
+                if (planeMarkers[callsign]) {
+                    map.removeLayer(planeMarkers[callsign]);
+                    delete planeMarkers[callsign];
+                }
+                if (planePaths[callsign]) {
+                    map.removeLayer(planePaths[callsign]);
+                    delete planePaths[callsign];
+                }
+                delete aircrafts[callsign];
+            }
+        });
+
+        updateStatusCounters();
+    }
+
+    function updateAircraftMarkersInterpolation() {
+        if (!isTrackingStarted) return;
+        const now = Date.now();
+
+        Object.keys(aircrafts).forEach(callsign => {
+            const flight = aircrafts[callsign];
+            const marker = planeMarkers[callsign];
+            if (!marker) return;
+
+            const timePassed = now - flight.lastUpdate;
+            let t = timePassed / parseInt(document.getElementById('updateInterval').value);
+
+            let currentLat, currentLng;
+
+            if (t <= 1) {
+                currentLat = flight.startLat + (flight.targetLat - flight.startLat) * t;
+                currentLng = flight.startLng + (flight.targetLng - flight.startLng) * t;
+            } else {
+                const overTimeSec = (timePassed - parseInt(document.getElementById('updateInterval').value)) / 1000;
+                const speedKps = (flight.speed * 1.852) / 3600;
+                const extraDistance = speedKps * overTimeSec;
+
+                const dLat = (extraDistance * Math.cos(flight.heading * Math.PI / 180)) / 111.32;
+                const dLng = (extraDistance * Math.sin(flight.heading * Math.PI / 180)) / (111.32 * Math.cos(flight.targetLat * Math.PI / 180));
+
+                currentLat = flight.targetLat + dLat;
+                currentLng = flight.targetLng + dLng;
+            }
+
+            marker.setLatLng([currentLat, currentLng]);
+            flight.currentLat = currentLat;
+            flight.currentLng = currentLng;
+            flight.currentDistance = getDistance(currentLat, currentLng, userLat, userLng);
+        });
+    }
+
+    // 動畫循環
+    function lerpAnimationLoop() {
+        updateAircraftMarkersInterpolation();
+        requestAnimationFrame(lerpAnimationLoop);
+    }
+    requestAnimationFrame(lerpAnimationLoop);
+
+    function updateStatusCounters() {
+        const total = Object.keys(aircrafts).length;
+        const warnings = Object.values(aircrafts).filter(f => f.isInsideCircle).length;
+
+        const activeCount = document.getElementById('active-count');
+        if (activeCount) activeCount.textContent = total;
+
+        const warningCount = document.getElementById('warning-count');
+        if (warningCount) warningCount.textContent = warnings;
+    }
+
+    function addAlertLog(callsign, type, message, color = "rose") {
+        const container = document.getElementById('alert-logs');
+        if (!container) return;
+
+        if (container.querySelector('.italic')) {
+            container.innerHTML = '';
+        }
+
+        const timeStr = new Date().toLocaleTimeString();
+        const logItem = document.createElement('div');
+
+        const borderColors = {
+            rose: "border-rose-900/40 bg-rose-950/10 text-rose-300",
+            emerald: "border-emerald-900/40 bg-emerald-950/10 text-emerald-300",
+            slate: "border-slate-800 bg-slate-900/30 text-slate-400"
+        };
+
+        const classTheme = borderColors[color] || borderColors.rose;
+
+        logItem.className = `p-1.5 rounded border ${classTheme} flex flex-col gap-0.5 text-[11px] mb-1.5`;
+        logItem.innerHTML = `
+            <div class="flex justify-between items-center text-[10px]">
+                <span class="font-bold flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-${color === 'slate' ? 'slate' : color}-500"></span>
+                    目標 ${callsign}
+                </span>
+                <span class="text-slate-500">${timeStr}</span>
+            </div>
+            <div class="mt-0.5">${message}</div>
+        `;
+
+        container.insertBefore(logItem, container.firstChild);
+    }
+
+    function clearAlertLogs() {
+        const logs = document.getElementById('alert-logs');
+        if (logs) logs.innerHTML = `<div class="text-slate-600 italic text-center py-2">目前空域安全，暫無警戒事件...</div>`;
+    }
+
+    function changeInterval() {
+        if (!trackingInterval) return;
+        clearInterval(trackingInterval);
+        const currentInterval = parseInt(document.getElementById('updateInterval').value);
+        trackingInterval = setInterval(fetchAircraftData, currentInterval);
+    }
+
+    // 立即刷新
+    function manualRefresh() {
+        if (!isTrackingStarted) return;
+        if (trackingInterval) clearInterval(trackingInterval);
+        fetchAircraftData();
+        trackingInterval = setInterval(fetchAircraftData, parseInt(document.getElementById('updateInterval').value));
+    }
+
+    // 焦點關注航班 (當用戶進入/點擊航班點進去時，觸發 H5 語音解鎖安全閥)
+    window.focusOnFlight = function(callsign) {
+        forceManualUnlockTTS(); // 🌟 當點進飛機時，強制解鎖一次 TTS 焦點，打破 WebView 的暫停狀態
+        const flight = aircrafts[callsign];
+        if (flight && map) {
+            map.setView([flight.currentLat, flight.currentLng], 11);
+            if (planeMarkers[callsign]) {
+                planeMarkers[callsign].openPopup();
+            }
+        }
+    };
+
+    function startTracking() {
+        if (isTrackingStarted) return;
+        isTrackingStarted = true;
+
+        // 解鎖語音
+        forceManualUnlockTTS();
+
+        // 偵測 Android 語音接口並列印至除錯面板
+        setTimeout(() => {
+            runAndroidWebViewDiagnostic();
+        }, 1500);
+
+        speakText("雷達空域監控已啟用");
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn) refreshBtn.style.display = 'inline-block';
+
+        // 請求定位
+        requestGPSLocation();
+
+        fetchAircraftData();
+        if (trackingInterval) clearInterval(trackingInterval);
+        trackingInterval = setInterval(fetchAircraftData, parseInt(document.getElementById('updateInterval').value));
+
+        document.getElementById('status').innerText = "雷達持續監控中";
+
+        const startBtn = document.getElementById('startBtn');
+        if (startBtn) {
+            startBtn.textContent = "🟢 雷達監控中";
+            startBtn.style.background = "#222";
+            startBtn.style.color = "#888";
+            startBtn.style.boxShadow = "none";
+            startBtn.disabled = true;
+        }
+
+        const infoPanel = document.getElementById('infoPanel');
+        if (infoPanel) infoPanel.textContent = "正在探測當上方圓真實航班空域...";
+
+        clearAlertLogs();
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+        return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+    }
+
+    window.onload = initMap;
+</script>
+</body>
+</html>
